@@ -4,8 +4,7 @@ import logging
 import sys
 from aiohttp import web
 from vkbottle import Bot
-from vkbottle.bot import Message             # <-- ИСПРАВЛЕНО: правильный импорт
-from vkbottle.tools import Mention
+from vkbottle.bot import Message
 
 # ====== НАСТРОЙКИ ЛОГИРОВАНИЯ ======
 logging.basicConfig(
@@ -49,6 +48,10 @@ def extract_mention_id(text: str):
         return int(match.group(1))
     return None
 
+def mention(user_id: int, name: str = "") -> str:
+    """Создаёт строку упоминания."""
+    return f"[id{user_id}|{name or '@user'}]"
+
 # ====== ОСНОВНЫЕ КОМАНДЫ ======
 
 @bot.on.message(command="ник")
@@ -58,7 +61,6 @@ async def set_nickname(message: Message):
         if not message.chat_id:
             return await message.answer("❌ Команда работает только в беседах.")
 
-        # Проверка прав отправителя
         if not await is_admin(message.peer_id, message.from_id):
             return await message.answer("⛔ Только администратор может менять ники.")
 
@@ -70,14 +72,14 @@ async def set_nickname(message: Message):
         if not user_id:
             return await message.answer("❌ Укажите пользователя через @.")
 
-        new_nick = args[2][:50]  # ограничение ВК
+        new_nick = args[2][:50]
 
         await bot.api.messages.set_chat_member_nickname(
             chat_id=message.chat_id,
             member_id=user_id,
             nick=new_nick
         )
-        await message.answer(f"✅ Ник для @id{user_id} изменён на «{new_nick}».")
+        await message.answer(f"✅ Ник для {mention(user_id)} изменён на «{new_nick}».")
 
     except Exception as e:
         logger.exception("Ошибка в команде !ник")
@@ -98,12 +100,10 @@ async def mention_user(message: Message):
         if not user_id:
             return await message.answer("❌ Укажите пользователя через @.")
 
-        # Текст после упоминания
         mention_end = re.search(r"\[id\d+\|[^\]]+\]", args[1]).end()
         text = args[1][mention_end:].strip() or "привет!"
 
-        mention = Mention(user_id)
-        await message.answer(f"{mention}, {text}")
+        await message.answer(f"{mention(user_id)}, {text}")
 
     except Exception as e:
         logger.exception("Ошибка в команде !упомяни")
@@ -134,7 +134,7 @@ async def kick_user(message: Message):
             chat_id=message.chat_id,
             member_id=user_id
         )
-        await message.answer(f"🚫 Пользователь @id{user_id} исключён из беседы.")
+        await message.answer(f"🚫 Пользователь {mention(user_id)} исключён из беседы.")
 
     except Exception as e:
         logger.exception("Ошибка в команде !кик")
@@ -162,14 +162,14 @@ async def ban_user(message: Message):
             return await message.answer("❌ Нельзя забанить самого себя.")
 
         reason = args[2] if len(args) > 2 else "Нарушение правил"
-        reason = reason[:100]  # ограничение ВК
+        reason = reason[:100]
 
         await bot.api.messages.ban_chat_member(
             chat_id=message.chat_id,
             member_id=user_id,
             reason=reason
         )
-        await message.answer(f"🔨 Пользователь @id{user_id} заблокирован в беседе. Причина: {reason}")
+        await message.answer(f"🔨 Пользователь {mention(user_id)} заблокирован в беседе. Причина: {reason}")
 
     except Exception as e:
         logger.exception("Ошибка в команде !бан")
@@ -182,17 +182,14 @@ async def callback_handler(request):
         data = await request.json()
         logger.debug(f"Получен callback: {data}")
 
-        # Проверка секретного ключа (если задан)
         if SECRET_KEY and request.headers.get("X-Secret") != SECRET_KEY:
             logger.warning("Неверный секретный ключ в запросе")
             return web.Response(status=403)
 
-        # Подтверждение сервера
         if data.get("type") == "confirmation":
             logger.info("Запрос подтверждения сервера")
             return web.Response(text=CONFIRMATION_CODE)
 
-        # Передаём событие в vkbottle
         await bot.emulate(data, confirmation_token=CONFIRMATION_CODE)
         return web.Response(text="ok")
 
