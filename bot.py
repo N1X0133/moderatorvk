@@ -3,7 +3,8 @@ import re
 import logging
 import sys
 from aiohttp import web
-from vkbottle import Bot, Message
+from vkbottle import Bot
+from vkbottle.bot import Message             # <-- ИСПРАВЛЕНО: правильный импорт
 from vkbottle.tools import Mention
 
 # ====== НАСТРОЙКИ ЛОГИРОВАНИЯ ======
